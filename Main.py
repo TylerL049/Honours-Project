@@ -103,7 +103,7 @@ net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
 net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
 
 thr = 0.1
-frame_skip = 1
+frame_skip = 2
 
 def track_pose():
     char_width = 420
@@ -114,6 +114,12 @@ def track_pose():
     frame_count = 0
     previous_points = {}
     ema_alpha = 0.4
+
+    def draw_leg_safe(hip, knee, ankle):
+        if hip is not None and knee is not None:
+            cv2.line(frame, hip, knee, (0,255,255), 2)
+        if knee is not None and ankle is not None:
+            cv2.line(frame, knee, ankle, (0,255,255), 2)
 
     with mss.mss() as sct:
         while program_active:
@@ -126,8 +132,8 @@ def track_pose():
                 arr = np.frombuffer(sct_img.rgb, dtype=np.uint8).reshape(sct_img.height, sct_img.width, 3)
                 frame = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
 
-                in_width = 368
-                in_height = 368
+                in_width = 256
+                in_height = 256
                 frame_resized = cv2.resize(frame, (in_width, in_height))
                 inp = cv2.dnn.blobFromImage(frame_resized, 1.0/255, (in_width, in_height), (0,0,0), swapRB=True, crop=False)
                 net.setInput(inp)
@@ -161,29 +167,11 @@ def track_pose():
                 waist = points.get("MidHip")
                 neck = points.get("Neck")
 
-                def draw_leg(hip_point, knee_point, ankle_point, knee_length, ankle_length):
-                    if hip_point is None or knee_point is None or ankle_point is None:
-                        return
-                    vec_hip_to_knee = np.array(knee_point) - np.array(hip_point)
-                    n1 = np.linalg.norm(vec_hip_to_knee)
-                    if n1 == 0:
-                        return
-                    vec_hip_to_knee = vec_hip_to_knee / n1 * knee_length
-                    fixed_knee = (int(hip_point[0] + vec_hip_to_knee[0]), int(hip_point[1] + vec_hip_to_knee[1]))
-                    vec_knee_to_ankle = np.array(ankle_point) - np.array(knee_point)
-                    n2 = np.linalg.norm(vec_knee_to_ankle)
-                    if n2 == 0:
-                        return
-                    vec_knee_to_ankle = vec_knee_to_ankle / n2 * ankle_length
-                    fixed_ankle = (int(fixed_knee[0] + vec_knee_to_ankle[0]), int(fixed_knee[1] + vec_knee_to_ankle[1]))
-                    cv2.line(frame, hip_point, fixed_knee, (0,255,255), 2)
-                    cv2.line(frame, fixed_knee, fixed_ankle, (0,255,255), 2)
-
                 if waist is not None and neck is not None:
                     cv2.line(frame, waist, neck, (0,255,255), 2)
 
-                draw_leg(points.get("LHip"), points.get("LKnee"), points.get("LAnkle"), 65, 65)
-                draw_leg(points.get("RHip"), points.get("RKnee"), points.get("RAnkle"), 80, 75)
+                draw_leg_safe(points.get("LHip"), points.get("LKnee"), points.get("LAnkle"))
+                draw_leg_safe(points.get("RHip"), points.get("RKnee"), points.get("RAnkle"))
 
                 cv2.imshow("QWOP Pose Tracking", frame)
 
